@@ -3,9 +3,12 @@ import FrontCard from "@/components/faces/front";
 import AppWrapper from "@/components/layout/app-wrapper";
 import ShareCard from "@/context/share-card";
 import { createRoom } from "@/services/synqd.service";
+import { uuidToShareCode } from "@/utils/helpers";
 
 export default async function Home() {
-  // const room = await createRoom();
+  const room = await createRoom();
+
+  const code = uuidToShareCode(room.data.id);
 
   return (
     <AppWrapper>
@@ -17,7 +20,10 @@ export default async function Home() {
             no cloud, no limits
           </span>
         </h1>
-        <ShareCard frontContent={<FrontCard />} backContent={<BackCard />} />
+        <ShareCard
+          frontContent={<FrontCard code={code} />}
+          backContent={<BackCard code={code} />}
+        />
       </div>
     </AppWrapper>
   );

@@ -10,8 +10,6 @@ import {
   ActiveTransfer,
   ChunkMessage,
 } from "../../types/context";
-
-import { config } from "../constants";
 import { generatePreview, generateUUID } from "@/utils/helpers";
 
 interface Peer {
@@ -43,17 +41,46 @@ const useTransfer = ({ room }: { room: string }) => {
   const [messagesToSend, setMessagesToSend] = useState<
     (Omit<MessageRequest, "sender"> & { receiver: string })[]
   >([]);
+  const [turnReady, setTurnReady] = useState(false);
   const receivedChunks = useRef<Map<string, ArrayBuffer[]>>(new Map());
   const fileMetadata = useRef<Map<string, FileMetadata>>(new Map());
   const activeTransfers = useRef<Map<string, ActiveTransfer>>(new Map());
   const pendingFiles = useRef<Map<string, File>>(new Map());
   const activeReceivingTransferId = useRef<string | null>(null);
   const transferToPeer = useRef<Map<string, string>>(new Map());
+  const [rtcConfig, setRtcConfig] = useState<RTCConfiguration>({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    iceTransportPolicy: "all",
+    iceCandidatePoolSize: 10,
+  });
 
   useEffect(() => {
-    if (!socket) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URI;
+
+    fetch(`${apiUrl}/api/ice-servers`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch");
+        return res.json();
+      })
+      .then((data) => {
+        if (data.iceServers) {
+          setRtcConfig({
+            iceServers: data.iceServers,
+            iceTransportPolicy: "all",
+            iceCandidatePoolSize: 10,
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("❌ Failed to fetch TURN credentials:", err);
+      })
+      .finally(() => setTurnReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!socket || !turnReady) return;
     socket.emit(EVENTS.EMIT.JOIN_ROOM, room);
-  }, [socket]);
+  }, [socket, turnReady]);
 
   const handlePendingQueue = async (from: string, peer: RTCPeerConnection) => {
     const queue = pendingCandidates.current.get(from) || [];
@@ -79,7 +106,7 @@ const useTransfer = ({ room }: { room: string }) => {
   };
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !turnReady) return;
 
     const handleReceiveIceCandidate = ({
       candidate,
@@ -152,9 +179,7 @@ const useTransfer = ({ room }: { room: string }) => {
       status: "approved" | "rejected";
     }) => {
       setMessagesToSend((prev) =>
-        prev.filter((p) => {
-          p.receiver !== data.receiver;
-        }),
+        prev.filter((p) => p.receiver !== data.receiver),
       );
       if (data.status == "rejected") return;
       sendMessage(data.message, data.receiver);
@@ -194,7 +219,7 @@ const useTransfer = ({ room }: { room: string }) => {
       peersRef.current = [];
       setPeers([]);
     };
-  }, [room, socket]);
+  }, [room, socket, turnReady]);
 
   const setupChannel = (channel: RTCDataChannel, userID: string) => {
     channel.binaryType = "arraybuffer";
@@ -495,7 +520,7 @@ const useTransfer = ({ room }: { room: string }) => {
     userId: string,
     isSender: boolean,
   ): Promise<Peer> => {
-    const peer = new RTCPeerConnection(config);
+    const peer = new RTCPeerConnection(rtcConfig);
     let channel = null;
 
     peer.onicecandidate = (event) => {

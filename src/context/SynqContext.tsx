@@ -5,6 +5,7 @@ import {
   Dispatch,
   ReactNode,
   useContext,
+  useEffect,
   useState,
 } from "react";
 
@@ -25,14 +26,11 @@ export const SynqContextProvider = createContext<SynqContextType>({
 const SynqContext = ({ children }: { children: ReactNode }) => {
   const [synq, setSynq] = useState<SynqContextType["synq"]>(null);
 
-  if (!synq) {
-    setSynq({
-      duration: 60,
-      id: "shadyqrcodeinit",
-      createdAt: new Date(),
-      devices: [],
-    });
-  }
+  useEffect(() => {
+    if (!synq) return;
+    localStorage.setItem("synq-code", synq.id);
+  }, [synq]);
+
   return (
     <SynqContextProvider.Provider value={{ synq, setSynq }}>
       {children}

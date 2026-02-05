@@ -157,3 +157,63 @@ export const generateUUID = () => {
     return v.toString(16);
   });
 };
+
+// utils/roomCode.ts
+
+const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_LENGTH = 6;
+
+const roomCodeMap = new Map<string, string>();
+const uuidToCodeMap = new Map<string, string>();
+
+function generateHash(uuid: string): string {
+  let hash = 0;
+  for (let i = 0; i < uuid.length; i++) {
+    const char = uuid.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(36).toUpperCase();
+}
+
+export function uuidToShareCode(uuid: string): string {
+  if (uuidToCodeMap.has(uuid)) {
+    return uuidToCodeMap.get(uuid)!;
+  }
+
+  const hash = generateHash(uuid);
+
+  let code = "";
+
+  for (let i = 0; i < 3; i++) {
+    const index = hash.charCodeAt(i % hash.length) % 24;
+    code += ALPHABET[index];
+  }
+
+  for (let i = 3; i < 6; i++) {
+    const index = hash.charCodeAt(i % hash.length) % ALPHABET.length;
+    code += ALPHABET[index];
+  }
+
+  roomCodeMap.set(code, uuid);
+  uuidToCodeMap.set(uuid, code);
+
+  return code;
+}
+
+export function shareCodeToUuid(code: string): string | null {
+  const normalizedCode = code.toUpperCase().replace(/-/g, "").trim();
+  return roomCodeMap.get(normalizedCode) || null;
+}
+
+export function isValidShareCode(code: string): boolean {
+  const normalized = code.toUpperCase().replace(/-/g, "");
+  const pattern = /^[A-Z]{3}[A-Z0-9]{3}$/;
+  return pattern.test(normalized);
+}
+
+export function formatShareCode(code: string): string {
+  const normalized = code.toUpperCase().replace(/-/g, "");
+  if (normalized.length !== 6) return code;
+  return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
+}

@@ -1,6 +1,7 @@
 import { BASE_URI } from "@/app/constants";
+import { formatShareCode } from "@/utils/helpers";
 
-const BackCard = () => {
+const BackCard = ({ code }: { code: string }) => {
   return (
     <div className="p-4 text-center bg-white rounded-md w-75 max-sm:w-70 aspect-square flex flex-col items-center justify-center">
       <h1 className="font-semibold tracking-wide leading-4">Manual</h1>
@@ -14,11 +15,11 @@ const BackCard = () => {
         <p className="text-sm font-medium">Enter the code below</p>
         <div>
           <h1 className="font-bold tracking-wide text-2xl leading-4 ">
-            SHA-D47
+            {formatShareCode(code)}
           </h1>
-          <p className="text-xs font-medium tracking-wide mt-1 text-[#444]">
+          {/* <p className="text-xs font-medium tracking-wide mt-1 text-[#444]">
             Expires in 30s
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

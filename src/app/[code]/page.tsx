@@ -131,7 +131,6 @@ const Page = () => {
       <div className="fixed inset-0 pointer-events-none">
         {peersRef.current.map((peer) => {
           const position = peerPositions.get(peer.peerID);
-          console.log({ peer });
           const progressInfo = getPeerProgress(peer.peerID);
 
           const waiting = messagesToSend.find((m) => m.receiver == peer.peerID);

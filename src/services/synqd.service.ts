@@ -1,12 +1,18 @@
-const BASE_URI = "http://localhost:4717";
+const BASE_URI = process.env.NEXT_PUBLIC_API_URI;
 
-export const createRoom = async () => {
+interface Synq {
+  message: string;
+  data: Data;
+}
+
+interface Data {
+  id: string;
+  duration: number;
+  createdAt: string;
+}
+
+export const createRoom = async (): Promise<Synq> => {
   const res = await fetch(`${BASE_URI}/synq`, { method: "POST" });
 
-  console.log({ res });
   return res.json();
 };
-
-export const checkRoomStatus = async ()=> {
-    
-}

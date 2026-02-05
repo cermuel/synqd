@@ -1,22 +1,26 @@
 "use client";
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import Navbar from "./navbar";
 import { useSocket } from "@/context/SocketContext";
 import { usePathname, useRouter } from "next/navigation";
+import { useSynq } from "@/context/SynqContext";
 
 const AppWrapper = ({ children }: { children: ReactNode }) => {
+  const { synq } = useSynq();
   const router = useRouter();
   const pathname = usePathname();
   const s = useSocket();
   const socket = s?.socket;
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !synq) return;
     socket.on("user-joined", ({ synqId }) => {
       if (pathname.includes(synqId)) return;
-      router.push(`/${synqId}`);
+      if (synq.id == synqId) {
+        router.push(`/${synqId}`);
+      }
     });
-  }, [socket]);
+  }, [socket, synq]);
 
   return (
     <main className="h-dvh w-dvw flex flex-col items-center justify-center bg-[#111] pt-12">
