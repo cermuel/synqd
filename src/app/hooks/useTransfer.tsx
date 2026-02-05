@@ -40,11 +40,15 @@ const useTransfer = ({ room }: { room: string }) => {
   const [receivingProgress, setReceivingProgress] = useState<{
     [key: string]: number;
   }>({});
+  const [messagesToSend, setMessagesToSend] = useState<
+    (Omit<MessageRequest, "sender"> & { receiver: string })[]
+  >([]);
   const receivedChunks = useRef<Map<string, ArrayBuffer[]>>(new Map());
   const fileMetadata = useRef<Map<string, FileMetadata>>(new Map());
   const activeTransfers = useRef<Map<string, ActiveTransfer>>(new Map());
   const pendingFiles = useRef<Map<string, File>>(new Map());
   const activeReceivingTransferId = useRef<string | null>(null);
+  const transferToPeer = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!socket) return;
@@ -147,6 +151,11 @@ const useTransfer = ({ room }: { room: string }) => {
       message: any;
       status: "approved" | "rejected";
     }) => {
+      setMessagesToSend((prev) =>
+        prev.filter((p) => {
+          p.receiver !== data.receiver;
+        }),
+      );
       if (data.status == "rejected") return;
       sendMessage(data.message, data.receiver);
     };
@@ -217,6 +226,7 @@ const useTransfer = ({ room }: { room: string }) => {
 
       if (data.type === "metadata") {
         activeReceivingTransferId.current = data.transferId;
+        transferToPeer.current.set(data.transferId, userID);
 
         fileMetadata.current.set(data.transferId, {
           name: data.fileName!,
@@ -258,8 +268,10 @@ const useTransfer = ({ room }: { room: string }) => {
             setReceivingProgress((prev) => {
               const newProg = { ...prev };
               delete newProg[data.transferId];
+
               return newProg;
             });
+            transferToPeer.current.delete(data.transferId);
           }, 3000);
         }
       } else if (data.type === "ack") {
@@ -336,9 +348,10 @@ const useTransfer = ({ room }: { room: string }) => {
         delete newProg[transferId];
         return newProg;
       });
+      transferToPeer.current.delete(transferId);
     }, 3000);
   };
-  const initMessage = (message: string, userID: string) => {
+  const initMessage = (message: any, userID: string) => {
     if (!socket) return;
     socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
       message,
@@ -394,6 +407,8 @@ const useTransfer = ({ room }: { room: string }) => {
     const preview = await generatePreview(file);
     const transferId = generateUUID();
 
+    transferToPeer.current.set(transferId, userID);
+
     const metadata: FileMetadata = {
       name: file.name,
       size: file.size,
@@ -415,6 +430,13 @@ const useTransfer = ({ room }: { room: string }) => {
     pendingFiles.current.set(transferId, file);
 
     if (!socket) return;
+    setMessagesToSend((prev) => [
+      ...prev,
+      {
+        message,
+        receiver: userID,
+      },
+    ]);
     socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
       message,
       receiver: userID,
@@ -525,6 +547,8 @@ const useTransfer = ({ room }: { room: string }) => {
     sendingProgress,
     receivingProgress,
     messageRequest,
+    messagesToSend,
+    transferToPeer,
     initMessage,
     sendText,
     sendFile,

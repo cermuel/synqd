@@ -28,8 +28,10 @@ const Page = () => {
     messageRequest,
     sendFile,
     sendFolder,
+    transferToPeer,
     sendingProgress,
     receivingProgress,
+    messagesToSend,
   } = useTransfer({
     room: code as string,
   });
@@ -84,17 +86,24 @@ const Page = () => {
     }
     setSelectedPeer(null);
   };
-
   const getPeerProgress = (peerID: string) => {
-    const sendingKeys = Object.keys(sendingProgress);
-    const receivingKeys = Object.keys(receivingProgress);
+    let activeTransferId: string | null = null;
 
-    if (sendingKeys.length > 0) {
-      return { progress: sendingProgress[sendingKeys[0]], type: "sending" };
+    transferToPeer.current.forEach((peerId, transferId) => {
+      if (peerId === peerID) {
+        activeTransferId = transferId;
+      }
+    });
+
+    if (!activeTransferId) return null;
+
+    if (sendingProgress[activeTransferId] !== undefined) {
+      return { progress: sendingProgress[activeTransferId], type: "sending" };
     }
-    if (receivingKeys.length > 0) {
+
+    if (receivingProgress[activeTransferId] !== undefined) {
       return {
-        progress: receivingProgress[receivingKeys[0]],
+        progress: receivingProgress[activeTransferId],
         type: "receiving",
       };
     }
@@ -122,7 +131,10 @@ const Page = () => {
       <div className="fixed inset-0 pointer-events-none">
         {peersRef.current.map((peer) => {
           const position = peerPositions.get(peer.peerID);
+          console.log({ peer });
           const progressInfo = getPeerProgress(peer.peerID);
+
+          const waiting = messagesToSend.find((m) => m.receiver == peer.peerID);
 
           if (!position) return null;
 
@@ -163,7 +175,11 @@ const Page = () => {
 
                   <button
                     onClick={() => handlePeerClick(peer.peerID)}
-                    disabled={!peer.isReady || messageRequest != null}
+                    disabled={
+                      !peer.isReady ||
+                      messageRequest != null ||
+                      waiting != undefined
+                    }
                     className="relative w-full h-full disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-transform hover:scale-110 active:scale-95"
                   >
                     <img
@@ -176,7 +192,6 @@ const Page = () => {
                   </button>
                 </div>
 
-                {/* Name with status indicator */}
                 <div className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full shadow-md flex items-center gap-1.5">
                   <p className="text-xs font-semibold text-[#222] whitespace-nowrap">
                     {generateCompactName(peer.peerID)}
@@ -187,6 +202,11 @@ const Page = () => {
                     }`}
                   />
                 </div>
+                {waiting && (
+                  <p className="mx-auto text-[#CCC] text-xs font-medium -mt-1.5 animate-pulse">
+                    Waiting
+                  </p>
+                )}
               </div>
             </div>
           );

@@ -96,7 +96,6 @@ const RequestModal = ({
               </div>
             </div>
           ) : (
-            // Icon + info
             <div className="flex items-center gap-3">
               <div className="shrink-0">{fileInfo.icon}</div>
               <div className="flex-1 min-w-0">
