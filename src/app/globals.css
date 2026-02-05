@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+html,
+body {
+  background-color: #111;
+}
+* {
+  font-family: "Clash Display", sans-serif;
+}
+
+.perspective-1000 {
+  perspective: 1000px;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+.rotate-x-180 {
+  transform: rotateX(180deg);
+}
+.ripple-span::before,
+.ripple-span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--ripple-color);
+  border-radius: 50%;
+  opacity: 0;
+  animation: ripple-perfect 4s linear infinite;
+  will-change: transform, opacity;
+}
+
+/* Staggering all 8 layers */
+.ring-batch-1::before {
+  animation-delay: 0s;
+}
+.ring-batch-1::after {
+  animation-delay: 0.5s;
+}
+
+.ring-batch-2::before {
+  animation-delay: 1s;
+}
+.ring-batch-2::after {
+  animation-delay: 1.5s;
+}
+
+.ring-batch-3::before {
+  animation-delay: 2s;
+}
+.ring-batch-3::after {
+  animation-delay: 2.5s;
+}
+
+.ring-batch-4::before {
+  animation-delay: 3s;
+}
+.ring-batch-4::after {
+  animation-delay: 3.5s;
+}
+
+@keyframes ripple-perfect {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(10);
+    opacity: 0;
+  }
+}
