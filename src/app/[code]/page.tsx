@@ -1,42 +1,35 @@
-// app/room/[code]/page.tsx
 "use client";
-
 import AppWrapper from "@/components/layout/app-wrapper";
 import { useSocket } from "@/context/SocketContext";
-import { useParams, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import useTransfer from "../hooks/useTransfer";
 import { generateCompactName } from "@/utils/helpers";
-import Image from "next/image";
 import Ripple from "@/components/shared/ripple";
 import RequestModal from "@/components/request-modal";
+import { useEffect, useRef, useState } from "react";
+
+interface PeerPosition {
+  x: number;
+  y: number;
+}
 
 const Page = () => {
   const { code } = useParams();
-  const searchParams = useSearchParams();
-  const mode = searchParams.get("mode");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // const {
-  //   connectionState,
-  //   sendProgress,
-  //   receiveProgress,
-  //   isSending,
-  //   isReceiving,
-  //   receivingFileName,
-  //   sendFile,
-  // } = useFileTransfer({
-  //   synqId: code as string,
-  //   sender: mode === "sender",
-  // });
+  const [selectedPeer, setSelectedPeer] = useState<string | null>(null);
+  const [peerPositions, setPeerPositions] = useState<Map<string, PeerPosition>>(
+    new Map(),
+  );
 
   const {
     peers,
     peersRef,
-    initMessage: sendMessage,
     handleMessageRequest,
     messageRequest,
+    sendFile,
+    sendFolder,
+    sendingProgress,
+    receivingProgress,
   } = useTransfer({
     room: code as string,
   });
@@ -44,23 +37,70 @@ const Page = () => {
   const s = useSocket();
   const socket = s?.socket;
 
-  // useEffect(() => {
-  //   if (!socket) return;
-  //   socket.emit("join-synq", code);
-  // }, [socket, code]);
+  useEffect(() => {
+    const newPositions = new Map<string, PeerPosition>();
 
-  // const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const file = e.target.files?.[0];
-  //   if (file) {
-  //     setSelectedFile(file);
-  //   }
-  // };
+    peers.forEach((peer) => {
+      if (!peerPositions.has(peer.peerID)) {
+        const safeMarginPx = 90;
+        const bottomSafePx = 140;
 
-  // const handleSend = async () => {
-  //   if (selectedFile) {
-  //     await sendFile(selectedFile);
-  //   }
-  // };
+        const safeMarginPercent = (safeMarginPx / window.innerWidth) * 100;
+        const bottomSafePercent = (bottomSafePx / window.innerHeight) * 100;
+
+        const x =
+          Math.random() * (100 - 2 * safeMarginPercent) + safeMarginPercent;
+        const y =
+          Math.random() * (100 - safeMarginPercent - bottomSafePercent) +
+          safeMarginPercent;
+
+        newPositions.set(peer.peerID, { x, y });
+      } else {
+        newPositions.set(peer.peerID, peerPositions.get(peer.peerID)!);
+      }
+    });
+
+    setPeerPositions(newPositions);
+  }, [peers.length]);
+
+  const handlePeerClick = (peerID: string) => {
+    setSelectedPeer(peerID);
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !selectedPeer) return;
+
+    if (files.length === 1) {
+      await sendFile(files[0], selectedPeer);
+    } else {
+      const fileArray = Array.from(files);
+      await sendFolder(fileArray, "Shared Files", selectedPeer);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    setSelectedPeer(null);
+  };
+
+  const getPeerProgress = (peerID: string) => {
+    const sendingKeys = Object.keys(sendingProgress);
+    const receivingKeys = Object.keys(receivingProgress);
+
+    if (sendingKeys.length > 0) {
+      return { progress: sendingProgress[sendingKeys[0]], type: "sending" };
+    }
+    if (receivingKeys.length > 0) {
+      return {
+        progress: receivingProgress[receivingKeys[0]],
+        type: "receiving",
+      };
+    }
+
+    return null;
+  };
 
   return (
     <AppWrapper>
@@ -70,32 +110,89 @@ const Page = () => {
           handleMessageRequest={handleMessageRequest}
         />
       )}
-      <div className="max-w-2xl mx-auto p-4 space-y-6">
-        <ul>
-          {peersRef.current.map((p, index) => {
-            return (
-              <div
-                key={p.peerID + index}
-                className="w-full flex items-center bg-white my-2 rounded-sm p-4 gap-1"
-              >
-                <h1 className="font-semibold text-sm max-w-40 truncate">
-                  {generateCompactName(p.peerID)}
-                </h1>
-                <div
-                  className={`w-2 aspect-square rounded-full ${p.isReady ? "bg-green-500" : "bg-[#EC0000]"}`}
-                />
-                <button
-                  disabled={!p.isReady}
-                  onClick={() => sendMessage("hello mate", p.peerID)}
-                  className="bg-black cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 text-white text-sm font-bold ml-auto rounded-full px-2 py-1"
-                >
-                  SEND
-                </button>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      <div className="fixed inset-0 pointer-events-none">
+        {peersRef.current.map((peer) => {
+          const position = peerPositions.get(peer.peerID);
+          const progressInfo = getPeerProgress(peer.peerID);
+
+          if (!position) return null;
+
+          return (
+            <div
+              key={peer.peerID}
+              className="absolute pointer-events-auto"
+              style={{
+                left: `${position.x}%`,
+                top: `${position.y}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative w-12.5 h-12.5">
+                  {progressInfo && (
+                    <svg
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                      width="62"
+                      height="62"
+                      style={{ overflow: "visible" }}
+                    >
+                      <circle
+                        cx="31"
+                        cy="31"
+                        r="28"
+                        fill="none"
+                        stroke={"#f3b819"}
+                        strokeWidth="3"
+                        strokeDasharray={`${2 * Math.PI * 28}`}
+                        strokeDashoffset={`${2 * Math.PI * 28 * (1 - progressInfo.progress / 100)}`}
+                        transform="rotate(-90 31 31)"
+                        className="transition-all duration-300"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  )}
+
+                  <button
+                    onClick={() => handlePeerClick(peer.peerID)}
+                    disabled={!peer.isReady || messageRequest != null}
+                    className="relative w-full h-full disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-transform hover:scale-110 active:scale-95"
+                  >
+                    <img
+                      src={`https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=${generateCompactName(peer.peerID)}`}
+                      width={50}
+                      height={50}
+                      className="rounded-full shadow-lg"
+                      alt={generateCompactName(peer.peerID)}
+                    />
+                  </button>
+                </div>
+
+                {/* Name with status indicator */}
+                <div className="bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full shadow-md flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-[#222] whitespace-nowrap">
+                    {generateCompactName(peer.peerID)}
+                  </p>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      peer.isReady ? "bg-green-500" : "bg-yellow-500"
+                    }`}
+                  />
+                </div>
               </div>
-            );
-          })}
-        </ul>
+            </div>
+          );
+        })}
       </div>
+
       {socket?.id && (
         <div className="w-full flex flex-col items-center gap-1 mt-auto fixed bottom-5">
           <img
@@ -105,12 +202,12 @@ const Page = () => {
             className="rounded-full"
             alt={generateCompactName(socket.id)}
           />
-
           <p className="text-white font-semibold mx-auto">
             {generateCompactName(socket.id)}
           </p>
         </div>
       )}
+
       <Ripple />
     </AppWrapper>
   );

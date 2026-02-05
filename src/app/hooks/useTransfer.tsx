@@ -2,7 +2,17 @@ import { useSocket } from "@/context/SocketContext";
 import { useEffect, useRef, useState } from "react";
 import { EVENTS } from "../constants/events";
 import { Socket } from "socket.io-client";
-// import { config } from "../constants";
+import {
+  TransferMessage,
+  MessageRequest,
+  FileMetadata,
+  FolderMetadata,
+  ActiveTransfer,
+  ChunkMessage,
+} from "../../types/context";
+
+import { config } from "../constants";
+import { generatePreview, generateUUID } from "@/utils/helpers";
 
 interface Peer {
   peerID: string;
@@ -11,29 +21,7 @@ interface Peer {
   isReady: boolean;
 }
 
-const config: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-    {
-      urls: "turn:global.turn.twilio.com:3478?transport=udp",
-      username: "your-twilio-username",
-      credential: "your-twilio-credential",
-    },
-    {
-      urls: "turn:global.turn.twilio.com:3478?transport=tcp",
-      username: "your-twilio-username",
-      credential: "your-twilio-credential",
-    },
-    {
-      urls: "turn:global.turn.twilio.com:443?transport=tcp",
-      username: "your-twilio-username",
-      credential: "your-twilio-credential",
-    },
-  ],
-  iceTransportPolicy: "all",
-  iceCandidatePoolSize: 10,
-};
+const CHUNK_SIZE = 16384;
 
 const useTransfer = ({ room }: { room: string }) => {
   const s = useSocket();
@@ -43,10 +31,20 @@ const useTransfer = ({ room }: { room: string }) => {
   const pendingCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(
     new Map(),
   );
-  const [messageRequest, setMessageRequest] = useState<{
-    sender: string;
-    message: any;
-  } | null>(null);
+  const [messageRequest, setMessageRequest] = useState<MessageRequest | null>(
+    null,
+  );
+  const [sendingProgress, setSendingProgress] = useState<{
+    [key: string]: number;
+  }>({});
+  const [receivingProgress, setReceivingProgress] = useState<{
+    [key: string]: number;
+  }>({});
+  const receivedChunks = useRef<Map<string, ArrayBuffer[]>>(new Map());
+  const fileMetadata = useRef<Map<string, FileMetadata>>(new Map());
+  const activeTransfers = useRef<Map<string, ActiveTransfer>>(new Map());
+  const pendingFiles = useRef<Map<string, File>>(new Map());
+  const activeReceivingTransferId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!socket) return;
@@ -212,10 +210,134 @@ const useTransfer = ({ room }: { room: string }) => {
       handleMessage(event, userID);
     };
   };
-  const handleMessage = (event: MessageEvent, userID: string) => {
-    console.log(`📨 RECEIVED from ${userID}:`, event.data);
+
+  const handleMessage = async (event: MessageEvent, userID: string) => {
+    if (typeof event.data === "string") {
+      const data: ChunkMessage = JSON.parse(event.data);
+
+      if (data.type === "metadata") {
+        activeReceivingTransferId.current = data.transferId;
+
+        fileMetadata.current.set(data.transferId, {
+          name: data.fileName!,
+          size: data.fileSize!,
+          type: data.fileType!,
+        });
+        receivedChunks.current.set(data.transferId, []);
+        setReceivingProgress((prev) => ({ ...prev, [data.transferId]: 0 }));
+
+        const peer = peersRef.current.find((p) => p.peerID === userID);
+        const ackMsg: ChunkMessage = {
+          type: "ack",
+          transferId: data.transferId,
+        };
+        peer?.channel?.send(JSON.stringify(ackMsg));
+      } else if (data.type === "complete") {
+        const chunks = receivedChunks.current.get(data.transferId);
+        const metadata = fileMetadata.current.get(data.transferId);
+
+        if (chunks && metadata) {
+          const blob = new Blob(chunks, { type: metadata.type });
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = metadata.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          activeReceivingTransferId.current = null;
+
+          receivedChunks.current.delete(data.transferId);
+          fileMetadata.current.delete(data.transferId);
+
+          setReceivingProgress((prev) => ({ ...prev, [data.transferId]: 100 }));
+          setTimeout(() => {
+            setReceivingProgress((prev) => {
+              const newProg = { ...prev };
+              delete newProg[data.transferId];
+              return newProg;
+            });
+          }, 3000);
+        }
+      } else if (data.type === "ack") {
+        const file = pendingFiles.current.get(data.transferId);
+        if (file) {
+          await sendFileChunks(file, data.transferId, userID);
+          pendingFiles.current.delete(data.transferId);
+        }
+      }
+    } else {
+      const transferId = activeReceivingTransferId.current;
+
+      if (!transferId) {
+        console.error("❌ Received chunk but no active transfer!");
+        return;
+      }
+
+      const chunkData = event.data as ArrayBuffer;
+      const chunks = receivedChunks.current.get(transferId);
+      const metadata = fileMetadata.current.get(transferId);
+
+      if (chunks && metadata) {
+        chunks.push(chunkData);
+
+        const received = chunks.reduce((acc, buf) => acc + buf.byteLength, 0);
+        const progress = Math.min((received / metadata.size) * 100, 100);
+
+        setReceivingProgress((prev) => ({ ...prev, [transferId]: progress }));
+      }
+    }
   };
 
+  const sendFileChunks = async (
+    file: File,
+    transferId: string,
+    userID: string,
+  ) => {
+    const peer = peersRef.current.find((p) => p.peerID === userID);
+    const channel = peer?.channel;
+
+    if (!channel || channel.readyState !== "open") return;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+
+    activeTransfers.current.set(transferId, {
+      file,
+      totalChunks,
+      sentChunks: 0,
+    });
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+      const chunk = arrayBuffer.slice(start, end);
+
+      while (channel.bufferedAmount > CHUNK_SIZE * 10) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      channel.send(chunk);
+
+      const progress = Math.min(((i + 1) / totalChunks) * 100, 100);
+      setSendingProgress((prev) => ({ ...prev, [transferId]: progress }));
+    }
+
+    const completeMsg: ChunkMessage = { type: "complete", transferId };
+    channel.send(JSON.stringify(completeMsg));
+
+    activeTransfers.current.delete(transferId);
+    setTimeout(() => {
+      setSendingProgress((prev) => {
+        const newProg = { ...prev };
+        delete newProg[transferId];
+        return newProg;
+      });
+    }, 3000);
+  };
   const initMessage = (message: string, userID: string) => {
     if (!socket) return;
     socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
@@ -234,8 +356,8 @@ const useTransfer = ({ room }: { room: string }) => {
     setMessageRequest(null);
   };
 
-  const sendMessage = (message: string, userID: string) => {
-    const peer = peersRef.current.find((p) => p.peerID == userID);
+  const sendMessage = (message: TransferMessage, userID: string) => {
+    const peer = peersRef.current.find((p) => p.peerID === userID);
     const channel = peer?.channel;
 
     if (!channel || channel.readyState !== "open") {
@@ -246,11 +368,105 @@ const useTransfer = ({ room }: { room: string }) => {
     }
 
     try {
-      channel.send(message);
-      console.log("Message passed to browser buffer successfully");
+      if (
+        message.type === "file" ||
+        message.type === "image" ||
+        message.type === "video"
+      ) {
+        const metadata = message.metadata as FileMetadata;
+        const chunkMsg: ChunkMessage = {
+          type: "metadata",
+          transferId: message.id,
+          fileName: metadata.name,
+          fileSize: metadata.size,
+          fileType: metadata.type,
+        };
+        channel.send(JSON.stringify(chunkMsg));
+      } else {
+        channel.send(JSON.stringify(message));
+      }
     } catch (error) {
-      console.error("Immediate send failure:", error);
+      console.error("Send failure:", error);
     }
+  };
+
+  const sendFile = async (file: File, userID: string) => {
+    const preview = await generatePreview(file);
+    const transferId = generateUUID();
+
+    const metadata: FileMetadata = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      preview,
+    };
+
+    const message: TransferMessage = {
+      id: transferId,
+      type: file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("video/")
+          ? "video"
+          : "file",
+      metadata,
+      preview,
+    };
+
+    pendingFiles.current.set(transferId, file);
+
+    if (!socket) return;
+    socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
+      message,
+      receiver: userID,
+    });
+  };
+  const sendFolder = async (
+    files: File[],
+    folderName: string,
+    userID: string,
+  ) => {
+    const fileMetadataList: FileMetadata[] = await Promise.all(
+      files.map(async (file) => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        preview: await generatePreview(file),
+      })),
+    );
+
+    const folderMetadata: FolderMetadata = {
+      name: folderName,
+      fileCount: files.length,
+      totalSize: files.reduce((sum, f) => sum + f.size, 0),
+      files: fileMetadataList,
+    };
+
+    const message: TransferMessage = {
+      id: generateUUID(),
+      type: "folder",
+      metadata: folderMetadata,
+    };
+
+    if (!socket) return;
+    socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
+      message,
+      receiver: userID,
+    });
+  };
+
+  const sendText = (text: string, userID: string) => {
+    const message: TransferMessage = {
+      id: generateUUID(),
+      type: "text",
+      metadata: null,
+      data: text,
+    };
+
+    if (!socket) return;
+    socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
+      message,
+      receiver: userID,
+    });
   };
 
   const createPeer = async (
@@ -303,7 +519,18 @@ const useTransfer = ({ room }: { room: string }) => {
     };
   };
 
-  return { peers, peersRef, initMessage, messageRequest, handleMessageRequest };
+  return {
+    peers,
+    peersRef,
+    sendingProgress,
+    receivingProgress,
+    messageRequest,
+    initMessage,
+    sendText,
+    sendFile,
+    sendFolder,
+    handleMessageRequest,
+  };
 };
 
 export default useTransfer;

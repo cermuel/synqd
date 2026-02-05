@@ -13,11 +13,10 @@ const Connect = () => {
       value = value[0];
     }
 
-    // Accept only alphanumeric characters (letters and numbers)
     if (!/^[A-Za-z0-9]*$/.test(value)) return;
 
     const newOtp = [...otp];
-    newOtp[index] = value.toUpperCase(); // Convert to uppercase for consistency
+    newOtp[index] = value.toUpperCase();
     setOtp(newOtp);
 
     if (value && index < 5) {
@@ -43,10 +42,8 @@ const Connect = () => {
 
       const text = await navigator.clipboard.readText();
 
-      // Extract only alphanumeric characters and convert to uppercase
       const cleanText = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-      // Take first 6 alphanumeric characters
       const characters = cleanText.slice(0, 6);
       const newOtp = characters.split("").concat(Array(6).fill("")).slice(0, 6);
       setOtp(newOtp);

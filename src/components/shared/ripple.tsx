@@ -24,7 +24,6 @@ export default function BottomRippleAnimation() {
   }, [nextId]);
 
   useEffect(() => {
-    // Remove ripples after animation completes (10s)
     const cleanup = setInterval(() => {
       const now = Date.now();
       setRipples((prev) =>
