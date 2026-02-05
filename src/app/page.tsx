@@ -5,6 +5,8 @@ import ShareCard from "@/context/share-card";
 import { createRoom } from "@/services/synqd.service";
 import { uuidToShareCode } from "@/utils/helpers";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const room = await createRoom();
 
