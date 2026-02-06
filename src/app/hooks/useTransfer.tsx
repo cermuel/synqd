@@ -10,7 +10,12 @@ import {
   ActiveTransfer,
   ChunkMessage,
 } from "../../types/context";
-import { generatePreview, generateUUID } from "@/utils/helpers";
+import {
+  generatePreview,
+  generateUUID,
+  shareCodeToUuid,
+} from "@/utils/helpers";
+import { useRouter } from "next/navigation";
 
 interface Peer {
   peerID: string;
@@ -22,6 +27,7 @@ interface Peer {
 const CHUNK_SIZE = 16384;
 
 const useTransfer = ({ room }: { room: string }) => {
+  const router = useRouter();
   const s = useSocket();
   const socket = s?.socket;
   const peersRef = useRef<Peer[]>([]);
@@ -53,6 +59,18 @@ const useTransfer = ({ room }: { room: string }) => {
     iceTransportPolicy: "all",
     iceCandidatePoolSize: 10,
   });
+  const [warning, setWarning] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!warning) return;
+    if (warning == 1) router.replace("/");
+    setTimeout(() => {
+      setWarning((prev) => {
+        if (!prev) return null;
+        return prev - 1;
+      });
+    }, 1000);
+  }, [warning]);
 
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URI;
@@ -75,35 +93,17 @@ const useTransfer = ({ room }: { room: string }) => {
         console.error("❌ Failed to fetch TURN credentials:", err);
       })
       .finally(() => setTurnReady(true));
+
+    return () => {
+      setWarning(null);
+    };
   }, []);
 
   useEffect(() => {
     if (!socket || !turnReady) return;
-    socket.emit(EVENTS.EMIT.JOIN_ROOM, room);
+    const actualRoom = shareCodeToUuid(room);
+    socket.emit(EVENTS.EMIT.JOIN_ROOM, actualRoom);
   }, [socket, turnReady]);
-
-  const handlePendingQueue = async (from: string, peer: RTCPeerConnection) => {
-    const queue = pendingCandidates.current.get(from) || [];
-
-    for (const candidate of queue) {
-      await peer
-        .addIceCandidate(new RTCIceCandidate(candidate))
-        .catch((err) => console.error("Error adding queued candidate:", err));
-    }
-    pendingCandidates.current.delete(from);
-  };
-
-  const handleCreatePeer = async (userId: string, socket: Socket) => {
-    if (!socket.id || userId === socket.id) return;
-    if (peersRef.current.find((p) => p.peerID === userId)) return;
-
-    const initiator: boolean = socket.id > userId;
-
-    const peer = await createPeer(userId, initiator);
-
-    peersRef.current.push(peer);
-    setPeers((prev) => [...prev, peer]);
-  };
 
   useEffect(() => {
     if (!socket || !turnReady) return;
@@ -185,6 +185,15 @@ const useTransfer = ({ room }: { room: string }) => {
       sendMessage(data.message, data.receiver);
     };
 
+    const handleWarning = ({
+      timeLeft,
+    }: {
+      message: string;
+      timeLeft: number;
+    }) => {
+      setWarning(timeLeft);
+    };
+
     socket.on(EVENTS.ON.USER_JOINED_SYNQ, ({ userId }) => {
       handleCreatePeer(userId, socket);
     });
@@ -197,6 +206,7 @@ const useTransfer = ({ room }: { room: string }) => {
         handleCreatePeer(id, socket);
       }),
     );
+    socket.on(EVENTS.ON.WARNING, handleWarning);
     socket.on(EVENTS.ON.ICE_CANDIDATE_RECEIVED, handleReceiveIceCandidate);
     socket.on(EVENTS.ON.RECEIVED_OFFER, handleReceivedOffer);
     socket.on(EVENTS.ON.RECEIVED_ANSWER, handleReceivedAnswer);
@@ -204,6 +214,7 @@ const useTransfer = ({ room }: { room: string }) => {
     socket.on(EVENTS.ON.MESSAGE_COMPLETED, handleNewMessage);
 
     return () => {
+      socket.off(EVENTS.ON.WARNING);
       socket.off(EVENTS.ON.SYNQ_USERS);
       socket.off(EVENTS.ON.USER_JOINED_SYNQ);
       socket.off(EVENTS.ON.ICE_CANDIDATE_RECEIVED);
@@ -220,6 +231,29 @@ const useTransfer = ({ room }: { room: string }) => {
       setPeers([]);
     };
   }, [room, socket, turnReady]);
+
+  const handlePendingQueue = async (from: string, peer: RTCPeerConnection) => {
+    const queue = pendingCandidates.current.get(from) || [];
+
+    for (const candidate of queue) {
+      await peer
+        .addIceCandidate(new RTCIceCandidate(candidate))
+        .catch((err) => console.error("Error adding queued candidate:", err));
+    }
+    pendingCandidates.current.delete(from);
+  };
+
+  const handleCreatePeer = async (userId: string, socket: Socket) => {
+    if (!socket.id || userId === socket.id) return;
+    if (peersRef.current.find((p) => p.peerID === userId)) return;
+
+    const initiator: boolean = socket.id > userId;
+
+    const peer = await createPeer(userId, initiator);
+
+    peersRef.current.push(peer);
+    setPeers((prev) => [...prev, peer]);
+  };
 
   const setupChannel = (channel: RTCDataChannel, userID: string) => {
     channel.binaryType = "arraybuffer";
@@ -376,6 +410,7 @@ const useTransfer = ({ room }: { room: string }) => {
       transferToPeer.current.delete(transferId);
     }, 3000);
   };
+
   const initMessage = (message: any, userID: string) => {
     if (!socket) return;
     socket.emit(EVENTS.EMIT.INITIATE_MESSAGE, {
@@ -383,6 +418,7 @@ const useTransfer = ({ room }: { room: string }) => {
       receiver: userID,
     });
   };
+
   const handleMessageRequest = (status: "approved" | "rejected") => {
     if (!socket || !messageRequest) return;
 
@@ -467,6 +503,7 @@ const useTransfer = ({ room }: { room: string }) => {
       receiver: userID,
     });
   };
+
   const sendFolder = async (
     files: File[],
     folderName: string,
@@ -574,6 +611,7 @@ const useTransfer = ({ room }: { room: string }) => {
     messageRequest,
     messagesToSend,
     transferToPeer,
+    warning,
     initMessage,
     sendText,
     sendFile,

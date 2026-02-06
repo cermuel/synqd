@@ -24,14 +24,15 @@ const Page = () => {
   const {
     peers,
     peersRef,
-    handleMessageRequest,
+    warning,
     messageRequest,
-    sendFile,
-    sendFolder,
     transferToPeer,
     sendingProgress,
     receivingProgress,
     messagesToSend,
+    handleMessageRequest,
+    sendFile,
+    sendFolder,
   } = useTransfer({
     room: code as string,
   });
@@ -86,6 +87,7 @@ const Page = () => {
     }
     setSelectedPeer(null);
   };
+
   const getPeerProgress = (peerID: string) => {
     let activeTransferId: string | null = null;
 
@@ -111,6 +113,12 @@ const Page = () => {
     return null;
   };
 
+  const time = warning
+    ? `${Math.floor(warning / 60)}:${(warning % 60).toString().padStart(2, "0")}`
+    : null;
+
+  console.log({ time });
+
   return (
     <AppWrapper>
       {messageRequest && (
@@ -118,6 +126,22 @@ const Page = () => {
           messageRequest={messageRequest}
           handleMessageRequest={handleMessageRequest}
         />
+      )}
+
+      {time && (
+        <div className="fixed bottom-4 right-4 group w-max">
+          <div className="rounded-full px-4 py-1 bg-white text-black font-semibold cursor-default">
+            {time}
+          </div>
+
+          {/* Tooltip */}
+          <div className="pointer-events-none absolute bottom-full right-0 mb-2 w-max opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="rounded-full font-medium bg-white text-black text-xs px-4 py-1.5">
+              This synq will self-destruct in{" "}
+              <span className="font-semibold">{time}</span>
+            </div>
+          </div>
+        </div>
       )}
 
       <input

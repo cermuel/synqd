@@ -9,6 +9,7 @@ export const EVENTS = {
   },
   ON: {
     USER_JOINED_SYNQ: "user-joined-synq",
+    WARNING: "synq-warning",
     USER_LEFT: "user-left",
     ICE_CANDIDATE_RECEIVED: "ice-candidate-received",
     RECEIVED_OFFER: "received-offer",
