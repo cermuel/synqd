@@ -16,6 +16,7 @@ import {
   shareCodeToUuid,
 } from "@/utils/helpers";
 import { useRouter } from "next/navigation";
+import { useSynq } from "@/context/SynqContext";
 
 interface Peer {
   peerID: string;
@@ -28,6 +29,7 @@ const CHUNK_SIZE = 16384;
 
 const useTransfer = ({ room }: { room: string }) => {
   const router = useRouter();
+  const { setSynq } = useSynq();
   const s = useSocket();
   const socket = s?.socket;
   const peersRef = useRef<Peer[]>([]);
@@ -63,7 +65,10 @@ const useTransfer = ({ room }: { room: string }) => {
 
   useEffect(() => {
     if (!warning) return;
-    if (warning == 1) router.replace("/");
+    if (warning == 1) {
+      if (setSynq) setSynq(null);
+      router.replace("/");
+    }
     setTimeout(() => {
       setWarning((prev) => {
         if (!prev) return null;
