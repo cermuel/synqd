@@ -10,11 +10,7 @@ import {
   ActiveTransfer,
   ChunkMessage,
 } from "../../types/context";
-import {
-  generatePreview,
-  generateUUID,
-  shareCodeToUuid,
-} from "@/utils/helpers";
+import { generatePreview, generateUUID } from "@/utils/helpers";
 import { useRouter } from "next/navigation";
 import { useSynq } from "@/context/SynqContext";
 
@@ -106,8 +102,8 @@ const useTransfer = ({ room }: { room: string }) => {
 
   useEffect(() => {
     if (!socket || !turnReady) return;
-    const actualRoom = shareCodeToUuid(room);
-    socket.emit(EVENTS.EMIT.JOIN_ROOM, actualRoom);
+
+    socket.emit(EVENTS.EMIT.JOIN_ROOM, room);
   }, [socket, turnReady]);
 
   useEffect(() => {

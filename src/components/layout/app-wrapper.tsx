@@ -4,7 +4,6 @@ import Navbar from "./navbar";
 import { useSocket } from "@/context/SocketContext";
 import { usePathname, useRouter } from "next/navigation";
 import { useSynq } from "@/context/SynqContext";
-import { uuidToShareCode } from "@/utils/helpers";
 
 const AppWrapper = ({ children }: { children: ReactNode }) => {
   const { synq } = useSynq();
@@ -16,10 +15,9 @@ const AppWrapper = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!socket || !synq) return;
     socket.on("user-joined", ({ synqId }) => {
-      const code = uuidToShareCode(synqId);
-      if (pathname.includes(code)) return;
-      if (synq.id == code) {
-        router.push(`/${code}`);
+      if (pathname.includes(synqId)) return;
+      if (synq.id == synqId) {
+        router.push(`/${synqId}`);
       }
     });
   }, [socket, synq]);

@@ -9,6 +9,7 @@ interface Data {
   id: string;
   duration: number;
   createdAt: string;
+  shareCode: string;
 }
 
 export const createRoom = async (): Promise<Synq> => {

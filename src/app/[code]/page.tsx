@@ -117,8 +117,6 @@ const Page = () => {
     ? `${Math.floor(warning / 60)}:${(warning % 60).toString().padStart(2, "0")}`
     : null;
 
-  console.log({ time });
-
   return (
     <AppWrapper>
       {messageRequest && (

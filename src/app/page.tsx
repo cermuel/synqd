@@ -3,14 +3,13 @@ import FrontCard from "@/components/faces/front";
 import AppWrapper from "@/components/layout/app-wrapper";
 import ShareCard from "@/context/share-card";
 import { createRoom } from "@/services/synqd.service";
-import { uuidToShareCode } from "@/utils/helpers";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const room = await createRoom();
 
-  const code = uuidToShareCode(room.data.id);
+  const code = room.data.shareCode;
 
   return (
     <AppWrapper>
