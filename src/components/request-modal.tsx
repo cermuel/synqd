@@ -82,13 +82,13 @@ const RequestModal = ({
 
         <div className="w-full rounded-xl p-4  border border-gray-200">
           {fileInfo.preview ? (
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-2 w-full">
               <img
                 src={fileInfo.preview}
                 alt="preview"
                 className="max-h-32 rounded-lg object-contain"
               />
-              <div className="text-center">
+              <div className="text-center w-full">
                 <p className="text-sm font-semibold text-[#222] truncate max-w-full">
                   {fileInfo.title}
                 </p>
