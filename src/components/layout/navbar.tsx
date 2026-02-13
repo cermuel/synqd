@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FaGithub, FaStar, FaCopy } from "react-icons/fa";
 
-const Navbar = () => {
+const Navbar = ({stars}: {stars?: number}) => {
   const pathname = usePathname();
 
   const isConnectPage = pathname.includes("synq");
@@ -59,14 +59,18 @@ const Navbar = () => {
           </Link>
         )}
 
-        <button className="rounded-full cursor-pointer hover:scale-105 duration-300 transition-all hover:bg-[#C791011A] px-2 py-1.5 border border-[#333] flex items-center gap-2">
+        <Link
+          href={"https://github.com/cermuel/synqd"}
+          target="_blank"
+          className="rounded-full cursor-pointer hover:scale-105 duration-300 transition-all hover:bg-[#C791011A] px-2 py-1.5 border border-[#333] flex items-center gap-2"
+        >
           <FaGithub color="#EEE" />
           <div className="h-4 w-px bg-[#444]" />
           <div className="flex items-center gap-0.5">
             <FaStar color="#e4ad16" size={14} />
-            <span className="text-white font-bold text-xs mt-0.75">4</span>
+            <span className="text-white font-bold text-xs mt-0.75">{stars}</span>
           </div>
-        </button>
+        </Link>
       </div>
     </nav>
   );

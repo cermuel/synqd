@@ -17,3 +17,9 @@ export const createRoom = async (): Promise<Synq> => {
 
   return res.json();
 };
+export const getStars = async (): Promise<any> => {
+  const res = await fetch(`https://api.github.com/repos/cermuel/synqd`, {
+    method: "GET",
+  });
+  return res.json();
+};
