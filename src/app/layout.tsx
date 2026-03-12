@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Synqd",
+  title: "Synq",
   description: "Real-time copy paste, file sharing across devices",
 };
 

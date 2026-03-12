@@ -36,7 +36,7 @@ const Navbar = ({stars}: {stars?: number}) => {
     <nav className="h-12 border-b border-b-[#222] w-full fixed top-0 left-0 flex items-center justify-center gap-4 bg-black/50 backdrop-blur-sm z-50">
       <div className="max-w-7xl h-full w-full flex items-center gap-4 px-5">
         <Link href={"/"} className="sm:text-xl font-bold text-white">
-          Synqd
+          Synq
         </Link>
 
         {!isHomePage && !isConnectPage ? (
